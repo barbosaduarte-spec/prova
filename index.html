@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jogo da Memória - Desafio Tech</title>
+    <style>
+        :root {
+            --bg-color: #121214;
+            --card-back: #202024;
+            --primary: #8257e5;
+            --secondary: #04d361;
+            --text: #e1e1e6;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            color: var(--primary);
+            margin-bottom: 5px;
+        }
+
+        .container {
+            display: flex;
+            gap: 40px;
+            flex-wrap: wrap;
+            justify-content: center;
+            max-width: 1000px;
+            width: 100%;
+        }
+
+        /* Painel do Jogo */
+        .game-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            align-items: center;
+        }
+
+        input {
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #323238;
+            background: #202024;
+            color: white;
+            outline: none;
+        }
+
+        button {
+            padding: 10px 20px;
+            border-radius: 5px;
+            border: none;
+            background-color: var(--primary);
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        button:hover {
+            filter: brightness(1.1);
+        }
+
+        .stats {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 15px;
+            font-size: 1.1rem;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(4, 80px);
+            gap: 10px;
+        }
+
+        .card {
+            width: 80px;
+            height: 80px;
+            background-color: var(--card-back);
+            border: 2px solid var(--primary);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.2rem;
+            cursor: pointer;
+            user-select: none;
+            transition: transform 0.2s, background-color 0.2s;
+        }
+
+        .card.flipped {
+            background-color: #29292e;
+            transform: scale(1.05);
+        }
+
+        .card.matched {
+            background-color: var(--secondary);
+            border-color: var(--secondary);
+            cursor: default;
+        }
+
+        /* Painel do Banco de Dados / Ranking */
+        .ranking-section {
+            background-color: #202024;
+            padding: 20px;
+            border-radius: 8px;
+            width: 300px;
+            height: fit-content;
+        }
+
+        .ranking-section h2 {
+            color: var(--secondary);
+            margin-bottom: 15px;
+            font-size: 1.3rem;
+            border-bottom: 1px solid #323238;
+            padding-bottom: 10px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 8px;
+            border-bottom: 1px solid #323238;
+        }
+
+        th {
+            color: #a8a8b3;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Memória Dev</h1>
+        <p>Encontre todos os pares com o menor número de jogadas!</p>
+    </header>
+
+    <div class="container">
+        <div class="game-section">
+            <div class="controls">
+                <input type="text" id="playerName" placeholder="Digite seu nome..." required>
+                <button onclick="startGame()">Iniciar / Reiniciar</button>
+            </div>
+
+            <div class="stats">
+                <span>Jogadas: <strong id="moves">0</strong></span>
+                <span>Pares: <strong id="pairs">0</strong>/8</span>
+            </div>
+
+            <div class="grid" id="grid"></div>
+        </div>
+
+        <div class="ranking-section">
+            <h2>🏆 Ranking (Banco de Dados)</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Jogador</th>
+                        <th>Jogadas</th>
+                    </tr>
+                </thead>
+                <tbody id="rankingList">
+                    <!-- Dados carregados via JS -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const emojis = ['🚀', '💻', '🔥', '⚡', '🎮', '👾', '🤖', '💎'];
+        let cards = [];
+        let flippedCards = [];
+        let matchedPairs = 0;
+        let moves = 0;
+        let lockBoard = false;
+
+        // URL opcional do Firebase Realtime Database (Deixe vazio para usar LocalStorage)
+        // Exemplo: "https://firebaseio.com"
+        const DATABASE_URL = ""; 
+
+        function startGame() {
+            const nameInput = document.getElementById('playerName').value.trim();
+            if (!nameInput) {
+                alert("Por favor, digite seu nome antes de iniciar!");
+                return;
+            }
+
+            const grid = document.getElementById('grid');
+            grid.innerHTML = '';
+            moves = 0;
+            matchedPairs = 0;
+            flippedCards = [];
+            lockBoard = false;
+
+            document.getElementById('moves').innerText = moves;
+            document.getElementById('pairs').innerText = matchedPairs;
+
+            // Duplica e embaralha os emojis
+            cards = [...emojis, ...emojis].sort(() => Math.random() - 0.5);
+
+            cards.forEach((emoji, index) => {
+                const card = document.createElement('div');
+                card.classList.add('card');
+                card.dataset.emoji = emoji;
+                card.dataset.index = index;
+                card.innerText = '?';
+                card.addEventListener('click', flipCard);
+                grid.appendChild(card);
+            });
+        }
+
+        function flipCard() {
+            if (lockBoard) return;
+            if (this.classList.contains('flipped') || this.classList.contains('matched')) return;
+
+            this.classList.add('flipped');
+            this.innerText = this.dataset.emoji;
+            flippedCards.push(this);
+
+            if (flippedCards.length === 2) {
+                moves++;
+                document.getElementById('moves').innerText = moves;
+                checkMatch();
+            }
+        }
+
+        function checkMatch() {
+            lockBoard = true;
+            const [card1, card2] = flippedCards;
+
+            if (card1.dataset.emoji === card2.dataset.emoji) {
+                card1.classList.add('matched');
+                card2.classList.add('matched');
+                matchedPairs++;
+                document.getElementById('pairs').innerText = matchedPairs;
+                flippedCards = [];
+                lockBoard = false;
+
+                if (matchedPairs === emojis.length) {
+                    setTimeout(endGame, 400);
+                }
+            } else {
+                setTimeout(() => {
+                    card1.classList.remove('flipped');
+                    card2.classList.remove('flipped');
+                    card1.innerText = '?';
+                    card2.innerText = '?';
+                    flippedCards = [];
+                    lockBoard = false;
+                }, 800);
+            }
+        }
+
+        async function endGame() {
+            const playerName = document.getElementById('playerName').value.trim();
+            alert(`Parabéns, ${playerName}! Você venceu em ${moves} jogadas!`);
+            await saveScore(playerName, moves);
+            loadRanking();
+        }
+
+        // Salva no Banco de Dados (Firebase via Fetch API ou LocalStorage)
+        async function saveScore(name, score) {
+            const record = { name, score, date: new Date().toLocaleDateString('pt-BR') };
+
+            if (DATABASE_URL) {
+                // Salva na nuvem (Firebase)
+                await fetch(DATABASE_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(record)
+                });
+            } else {
+                // Salva localmente no navegador
+                const ranking = JSON.parse(localStorage.getItem('memoria_ranking')) || [];
+                ranking.push(record);
+                localStorage.setItem('memoria_ranking', JSON.stringify(ranking));
+            }
+        }
+
+        // Consulta o Banco de Dados e exibe na tabela
+        async function loadRanking() {
+            const rankingList = document.getElementById('rankingList');
+            rankingList.innerHTML = '<tr><td colspan="3">Carregando...</td></tr>';
+            let records = [];
+
+            if (DATABASE_URL) {
+                const response = await fetch(DATABASE_URL);
+                const data = await response.json();
+                if (data) {
+                    records = Object.values(data);
+                }
+            } else {
+                records = JSON.parse(localStorage.getItem('memoria_ranking')) || [];
+            }
+
+            // Ordena pelo menor número de jogadas
+            records.sort((a, b) => a.score - b.score);
+
+            rankingList.innerHTML = '';
+            records.slice(0, 10).forEach((item, index) => {
+                const row = `
+${index + 1}º
+${item.name}${item.score}
+`;
+rankingList.innerHTML += row;
+});
+if (records.length === 0) {
+rankingList.innerHTML = 'Nenhum registro ainda.';
+}
+}
+// Carrega o ranking ao abrir a página
+loadRanking();
+
+
+
+---
+
+### Como cumprir os requisitos da atividade
+
+* **1. Tecnologias de Front-end:** O projeto utiliza **HTML5**, **CSS3** (com Grid e Flexbox) e **JavaScript** puro.
+* **2. Banco de Dados:** O código já funciona usando o `LocalStorage` do navegador para gravar e consultar os pontos. Se o seu professor exigir um banco de dados externo na nuvem, basta criar um projeto gratuito no **Firebase (Realtime Database)**, copiar a URL gerada e colar na variável `DATABASE_URL` no código JavaScript.
+* **3. Funcionalidades:** Sistema de validação de nome, embaralhamento aleatório das cartas, contagem de movimentos, verificação de pares e ordenação automática do ranking.
+* **4. Disponibilizar Online (Link Acessível):** Crie uma conta gratuita no **GitHub** ou **Netlify** (Netlify Drop). Basta arrastar o arquivo `index.html` para o site do Netlify e ele gerará um link público instantâneo para você enviar ao professor.
+* **5. Finalidade Clara:** Jogo digital voltado ao entretenimento e estímulo da memória visual com sistema competitivo de pontuação.
+
+<FollowUp>
+Se você quiser deixar o projeto ainda mais completo para garantir a nota máxima, posso ajudar com:
+* O passo a passo para conectar o **Firebase** gratuitamente como banco de dados na nuvem
+* Como hospedar o arquivo no **GitHub Pages** ou **Netlify** para gerar o link de entrega
+* Adicionar um **cronômetro** ou **níveis de dificuldade** ao jogo
+
+Qual dessas etapas você gostaria de fazer agora?
+</FollowUp>
